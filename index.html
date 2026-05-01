@@ -624,6 +624,73 @@
     color: var(--grey);
   }
 
+  /* ============ ARCHIVE PANEL ============ */
+  #archive-panel {
+    display: none;
+    border: 1px solid var(--orange-dim);
+    border-top: none;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  #archive-panel.open { display: block; }
+
+  .archive-search {
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--grey-dim);
+    color: var(--orange);
+    font-family: inherit;
+    font-size: 11px;
+    padding: 6px 12px;
+    outline: none;
+    letter-spacing: 1px;
+  }
+
+  .archive-search::placeholder { color: var(--grey); }
+
+  .archive-group-header {
+    padding: 3px 12px;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--orange-dim);
+    background: rgba(255,136,0,0.04);
+    border-bottom: 1px solid var(--grey-dim);
+  }
+
+  .archive-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    padding: 4px 12px;
+    color: var(--grey);
+    border-bottom: 1px solid var(--grey-dim);
+  }
+
+  .archive-item-text {
+    flex: 1;
+    text-decoration: line-through;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .archive-item-date { flex: 0 0 auto; font-size: 9px; opacity: 0.6; }
+
+  .restore-btn {
+    flex: 0 0 auto;
+    background: transparent;
+    border: 1px solid var(--grey-dim);
+    color: var(--grey);
+    font-family: inherit;
+    font-size: 9px;
+    padding: 2px 6px;
+    letter-spacing: 1px;
+    cursor: pointer;
+  }
+  .restore-btn:hover { border-color: var(--orange); color: var(--orange); }
+
   /* ============ SETTINGS MODAL ============ */
   #settings-modal {
     display: none;
@@ -844,6 +911,15 @@
   </div>
   <div id="completed-panel">
     <div id="completed-list"></div>
+  </div>
+
+  <div class="completed-bar" style="margin-top:2px;">
+    <span style="color:var(--orange-dim);">ARCHIVE</span>
+    <span class="completed-toggle" id="archive-toggle">SHOW [+]</span>
+  </div>
+  <div id="archive-panel">
+    <input class="archive-search" id="archive-search" type="text" placeholder="> SEARCH ARCHIVE..." />
+    <div id="archive-list"></div>
   </div>
 </div>
 

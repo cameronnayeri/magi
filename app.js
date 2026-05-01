@@ -328,6 +328,15 @@ async function saveTaskText(id, text) {
   if (task) task.text = text;
 }
 
+async function restoreTask(id) {
+  await supabase.from('tasks')
+    .update({ archived: false, completed: false, completed_at: null })
+    .eq('id', id);
+  const task = state.tasks.find(t => t.id === id);
+  if (task) { task.archived = false; task.completed = false; task.completed_at = null; }
+  render();
+}
+
 // ============ TIME UTILS ============
 function getTimeStatus(task) {
   if (!task.due_at) return { text: 'NO DEADLINE', overdue: false, urgent: false };
@@ -416,6 +425,9 @@ function render() {
   }
 
   renderCompleted();
+  if (document.getElementById('archive-panel').classList.contains('open')) {
+    renderArchive(document.getElementById('archive-search').value);
+  }
 }
 
 function buildListColumn(list, idx) {
@@ -731,6 +743,73 @@ completedToggle.addEventListener('click', () => {
   completedPanel.classList.toggle('open');
   completedToggle.textContent = completedPanel.classList.contains('open') ? 'HIDE [-]' : 'SHOW [+]';
 });
+
+// ============ ARCHIVE PANEL ============
+function renderArchive(searchTerm = '') {
+  const el = document.getElementById('archive-list');
+  el.innerHTML = '';
+  const term = searchTerm.toLowerCase();
+  const archived = state.tasks
+    .filter(t => t.archived && (!term || t.text.toLowerCase().includes(term)))
+    .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
+
+  if (archived.length === 0) {
+    el.innerHTML = '<div class="completed-item"><span style="color:var(--grey);">> NO ARCHIVED TASKS</span></div>';
+    return;
+  }
+
+  // Group by list
+  const groups = {};
+  archived.forEach(t => {
+    const name = state.lists.find(l => l.id === t.list_id)?.name || 'UNKNOWN';
+    if (!groups[name]) groups[name] = [];
+    groups[name].push(t);
+  });
+
+  Object.entries(groups).forEach(([listName, tasks]) => {
+    const groupHeader = document.createElement('div');
+    groupHeader.className = 'archive-group-header';
+    groupHeader.textContent = `▸ ${listName}`;
+    el.appendChild(groupHeader);
+
+    tasks.forEach(t => {
+      const item = document.createElement('div');
+      item.className = 'archive-item';
+
+      const textEl = document.createElement('span');
+      textEl.className = 'archive-item-text';
+      textEl.textContent = t.text;
+      textEl.title = t.text;
+
+      const dateEl = document.createElement('span');
+      dateEl.className = 'archive-item-date';
+      dateEl.textContent = timeAgo(t.completed_at);
+
+      const btn = document.createElement('button');
+      btn.className = 'restore-btn';
+      btn.textContent = 'RESTORE';
+      btn.addEventListener('click', () => restoreTask(t.id));
+
+      item.appendChild(textEl);
+      item.appendChild(dateEl);
+      item.appendChild(btn);
+      el.appendChild(item);
+    });
+  });
+}
+
+const archivePanel = document.getElementById('archive-panel');
+const archiveToggle = document.getElementById('archive-toggle');
+const archiveSearch = document.getElementById('archive-search');
+
+archiveToggle.addEventListener('click', () => {
+  archivePanel.classList.toggle('open');
+  archiveToggle.textContent = archivePanel.classList.contains('open') ? 'HIDE [-]' : 'SHOW [+]';
+  if (archivePanel.classList.contains('open')) renderArchive(archiveSearch.value);
+});
+
+archiveSearch.addEventListener('input', () => renderArchive(archiveSearch.value));
+archiveSearch.addEventListener('click', e => e.stopPropagation());
 
 // ============ SETTINGS UI ============
 const settingsModal = document.getElementById('settings-modal');

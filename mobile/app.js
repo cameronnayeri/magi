@@ -288,6 +288,15 @@ async function saveTaskText(id, text) {
   if (task) task.text = text;
 }
 
+async function restoreTask(id) {
+  await supabase.from('tasks')
+    .update({ archived: false, completed: false, completed_at: null })
+    .eq('id', id);
+  const task = state.tasks.find(t => t.id === id);
+  if (task) { task.archived = false; task.completed = false; task.completed_at = null; }
+  render();
+}
+
 // ============ TIME UTILS ============
 function getTimeStatus(task) {
   if (!task.due_at) return { text: 'NO DEADLINE', overdue: false, urgent: false };
@@ -353,9 +362,102 @@ function openColorPicker(anchorEl, listId, currentColor) {
 // ============ RENDER ============
 function render() {
   buildListTabs();
+  if (activeListId === '__archive__') {
+    buildArchiveView();
+    buildAddBar(null);
+    return;
+  }
   const activeList = state.lists.find(l => l.id === activeListId);
   buildListView(activeList);
   buildAddBar(activeList);
+}
+
+function buildArchiveView() {
+  const view = document.getElementById('list-view');
+  view.innerHTML = '';
+  view.style.color = '#aa5500';
+
+  const header = document.createElement('div');
+  header.className = 'list-view-header';
+  header.style.borderBottomColor = '#aa5500';
+  header.innerHTML = `<div><div class="list-view-name" style="font-size:18px;">ARCHIVE</div><div class="list-view-meta">COMPLETED TASKS OLDER THAN ${ARCHIVE_DAYS} DAYS</div></div>`;
+  view.appendChild(header);
+
+  const searchWrap = document.createElement('div');
+  searchWrap.style.cssText = 'padding:10px 14px; border-bottom:1px solid var(--grey-dim);';
+  const searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.placeholder = '> SEARCH ARCHIVE...';
+  searchInput.style.cssText = 'width:100%;background:transparent;border:1px solid var(--grey-dim);color:#aa5500;font-family:inherit;font-size:14px;padding:8px;outline:none;';
+  searchInput.addEventListener('input', () => renderArchiveList(view, searchInput.value));
+  searchInput.addEventListener('click', e => e.stopPropagation());
+  searchWrap.appendChild(searchInput);
+  view.appendChild(searchWrap);
+
+  renderArchiveList(view, '');
+}
+
+function renderArchiveList(view, searchTerm) {
+  // Remove old list if present, keep header and search
+  let existing = view.querySelector('.archive-list-container');
+  if (existing) existing.remove();
+
+  const container = document.createElement('div');
+  container.className = 'archive-list-container';
+
+  const term = searchTerm.toLowerCase();
+  const archived = state.tasks
+    .filter(t => t.archived && (!term || t.text.toLowerCase().includes(term)))
+    .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
+
+  if (archived.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-list';
+    empty.textContent = term ? '> NO MATCHES' : '> NO ARCHIVED TASKS';
+    container.appendChild(empty);
+    view.appendChild(container);
+    return;
+  }
+
+  const groups = {};
+  archived.forEach(t => {
+    const name = state.lists.find(l => l.id === t.list_id)?.name || 'UNKNOWN';
+    if (!groups[name]) groups[name] = [];
+    groups[name].push(t);
+  });
+
+  Object.entries(groups).forEach(([listName, tasks]) => {
+    const groupHeader = document.createElement('div');
+    groupHeader.style.cssText = 'padding:6px 14px;font-size:9px;letter-spacing:2px;color:var(--orange-dim);background:rgba(255,136,0,0.04);border-bottom:1px solid var(--grey-dim);';
+    groupHeader.textContent = `▸ ${listName}`;
+    container.appendChild(groupHeader);
+
+    tasks.forEach(t => {
+      const item = document.createElement('div');
+      item.style.cssText = 'display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--grey-dim);color:var(--grey);';
+
+      const textEl = document.createElement('span');
+      textEl.style.cssText = 'flex:1;text-decoration:line-through;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      textEl.textContent = t.text;
+      textEl.title = t.text;
+
+      const dateEl = document.createElement('span');
+      dateEl.style.cssText = 'flex:0 0 auto;font-size:9px;opacity:0.6;white-space:nowrap;';
+      dateEl.textContent = timeAgo(t.completed_at);
+
+      const btn = document.createElement('button');
+      btn.style.cssText = 'flex:0 0 auto;background:transparent;border:1px solid var(--grey-dim);color:var(--grey);font-family:inherit;font-size:10px;padding:6px 10px;letter-spacing:1px;cursor:pointer;min-height:36px;';
+      btn.textContent = 'RESTORE';
+      btn.addEventListener('click', e => { e.stopPropagation(); restoreTask(t.id); });
+
+      item.appendChild(textEl);
+      item.appendChild(dateEl);
+      item.appendChild(btn);
+      container.appendChild(item);
+    });
+  });
+
+  view.appendChild(container);
 }
 
 function buildListTabs() {
@@ -386,6 +488,14 @@ function buildListTabs() {
     if (name && name.trim()) createList(name.trim().toUpperCase());
   });
   tabs.appendChild(addTab);
+
+  const archTab = document.createElement('div');
+  archTab.className = 'list-tab' + (activeListId === '__archive__' ? ' active' : '');
+  archTab.textContent = 'ARCH';
+  archTab.style.color = activeListId === '__archive__' ? '#aa5500' : '';
+  archTab.style.borderBottomColor = activeListId === '__archive__' ? '#aa5500' : 'transparent';
+  archTab.addEventListener('click', () => { activeListId = '__archive__'; render(); });
+  tabs.appendChild(archTab);
 }
 
 function buildListView(list) {
