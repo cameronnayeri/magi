@@ -322,6 +322,12 @@ async function saveTaskNotes(id, notes) {
   if (task) task.notes = notes;
 }
 
+async function saveTaskText(id, text) {
+  await supabase.from('tasks').update({ text }).eq('id', id);
+  const task = state.tasks.find(t => t.id === id);
+  if (task) task.text = text;
+}
+
 // ============ TIME UTILS ============
 function getTimeStatus(task) {
   if (!task.due_at) return { text: 'NO DEADLINE', overdue: false, urgent: false };
@@ -600,6 +606,19 @@ function buildTaskRow(task) {
   const text = document.createElement('div');
   text.className = 'task-text';
   text.textContent = task.text;
+
+  text.addEventListener('blur', async () => {
+    text.contentEditable = false;
+    const newText = text.textContent.trim();
+    if (!newText) { text.textContent = task.text; return; }
+    if (newText !== task.text) await saveTaskText(task.id, newText);
+  });
+  text.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); text.blur(); }
+    if (e.key === 'Escape') { text.textContent = task.text; text.blur(); }
+  });
+  text.addEventListener('click', e => { if (text.contentEditable === 'true') e.stopPropagation(); });
+
   main.appendChild(text);
 
   const meta = document.createElement('div');
@@ -628,6 +647,22 @@ function buildTaskRow(task) {
 
   row.appendChild(main);
 
+  const edit = document.createElement('button');
+  edit.className = 'task-del';
+  edit.textContent = '✎';
+  edit.title = 'Edit';
+  edit.addEventListener('click', e => {
+    e.stopPropagation();
+    text.contentEditable = true;
+    text.focus();
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
+  row.appendChild(edit);
+
   const del = document.createElement('button');
   del.className = 'task-del';
   del.textContent = '×';
@@ -636,7 +671,7 @@ function buildTaskRow(task) {
   row.appendChild(del);
 
   row.addEventListener('click', e => {
-    if (check.contains(e.target) || del.contains(e.target) || notesTA.contains(e.target)) return;
+    if (check.contains(e.target) || del.contains(e.target) || edit.contains(e.target) || notesTA.contains(e.target) || text.contentEditable === 'true') return;
     if (expandedTaskNotes.has(task.id)) {
       expandedTaskNotes.delete(task.id);
       notesPanel.style.display = 'none';
