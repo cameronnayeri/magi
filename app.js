@@ -337,6 +337,20 @@ async function restoreTask(id) {
   render();
 }
 
+async function shareList(listId) {
+  const email = prompt('SHARE WITH (EMAIL):', '');
+  if (!email || !email.trim()) return;
+  const { error } = await supabase
+    .from('list_members')
+    .insert({ list_id: listId, user_email: email.trim().toLowerCase() });
+  if (error) {
+    if (error.code === '23505') alert('ALREADY SHARED WITH THAT EMAIL');
+    else alert('ERROR: ' + error.message.toUpperCase());
+    return;
+  }
+  alert('SHARED SUCCESSFULLY');
+}
+
 // ============ TIME UTILS ============
 function getTimeStatus(task) {
   if (!task.due_at) return { text: 'NO DEADLINE', overdue: false, urgent: false };
@@ -465,7 +479,9 @@ function buildListColumn(list, idx) {
   const meta = document.createElement('div');
   meta.className = 'list-meta';
   const taskCount = state.tasks.filter(t => t.list_id === list.id && !t.completed).length;
-  meta.innerHTML = `<span>UNIT-${String(idx).padStart(2,'0')}</span><span>N=${taskCount}</span>`;
+  const isOwner = list.user_id === state.user.id;
+  const sharedBadge = isOwner ? '' : ' <span style="opacity:0.6;">[SHARED]</span>';
+  meta.innerHTML = `<span>UNIT-${String(idx).padStart(2,'0')}${sharedBadge}</span><span>N=${taskCount}</span>`;
   header.appendChild(meta);
 
   const actions = document.createElement('div');
@@ -497,11 +513,20 @@ function buildListColumn(list, idx) {
     right.addEventListener('click', () => moveList(list.id, 1));
     actions.appendChild(right);
   }
-  const del = document.createElement('button');
-  del.className = 'mini-btn';
-  del.textContent = 'DEL';
-  del.addEventListener('click', () => deleteList(list.id));
-  actions.appendChild(del);
+  if (isOwner) {
+    const shareBtn = document.createElement('button');
+    shareBtn.className = 'mini-btn';
+    shareBtn.textContent = 'SHR';
+    shareBtn.title = 'Share this list';
+    shareBtn.addEventListener('click', () => shareList(list.id));
+    actions.appendChild(shareBtn);
+
+    const del = document.createElement('button');
+    del.className = 'mini-btn';
+    del.textContent = 'DEL';
+    del.addEventListener('click', () => deleteList(list.id));
+    actions.appendChild(del);
+  }
   header.appendChild(actions);
 
   col.appendChild(header);

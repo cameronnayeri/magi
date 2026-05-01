@@ -297,6 +297,20 @@ async function restoreTask(id) {
   render();
 }
 
+async function shareList(listId) {
+  const email = prompt('SHARE WITH (EMAIL):', '');
+  if (!email || !email.trim()) return;
+  const { error } = await supabase
+    .from('list_members')
+    .insert({ list_id: listId, user_email: email.trim().toLowerCase() });
+  if (error) {
+    if (error.code === '23505') alert('ALREADY SHARED WITH THAT EMAIL');
+    else alert('ERROR: ' + error.message.toUpperCase());
+    return;
+  }
+  alert('SHARED SUCCESSFULLY');
+}
+
 // ============ TIME UTILS ============
 function getTimeStatus(task) {
   if (!task.due_at) return { text: 'NO DEADLINE', overdue: false, urgent: false };
@@ -547,10 +561,11 @@ function buildListView(list) {
     if (e.key === 'Escape') { nameEl.textContent = list.name; nameEl.blur(); }
   });
 
+  const isOwner = list.user_id === state.user.id;
   const taskCount = state.tasks.filter(t => t.list_id === list.id && !t.completed).length;
   const metaEl = document.createElement('div');
   metaEl.className = 'list-view-meta';
-  metaEl.textContent = `N=${taskCount} ACTIVE`;
+  metaEl.textContent = `N=${taskCount} ACTIVE${isOwner ? '' : '  [SHARED]'}`;
 
   nameWrap.appendChild(nameEl);
   nameWrap.appendChild(metaEl);
@@ -582,11 +597,20 @@ function buildListView(list) {
     actions.appendChild(right);
   }
 
-  const del = document.createElement('button');
-  del.className = 'action-btn danger';
-  del.textContent = 'DEL';
-  del.addEventListener('click', () => deleteList(list.id));
-  actions.appendChild(del);
+  if (isOwner) {
+    const shareBtn = document.createElement('button');
+    shareBtn.className = 'action-btn';
+    shareBtn.textContent = 'SHR';
+    shareBtn.title = 'Share this list';
+    shareBtn.addEventListener('click', () => shareList(list.id));
+    actions.appendChild(shareBtn);
+
+    const del = document.createElement('button');
+    del.className = 'action-btn danger';
+    del.textContent = 'DEL';
+    del.addEventListener('click', () => deleteList(list.id));
+    actions.appendChild(del);
+  }
 
   header.appendChild(actions);
   view.appendChild(header);
