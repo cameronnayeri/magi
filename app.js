@@ -507,7 +507,7 @@ function render() {
     renderArchive(document.getElementById('archive-search').value);
   }
   renderCalendar();
-  if (document.getElementById('cal-overlay').classList.contains('open')) {
+  if (document.getElementById('cal-overlay').style.display === 'flex') {
     buildCalOvGrid();
   }
 }
@@ -1164,12 +1164,12 @@ let calOvDate = new Date();
 
 function openCalendarOverlay() {
   calOvDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1);
-  document.getElementById('cal-overlay').classList.add('open');
+  document.getElementById('cal-overlay').style.display = 'flex';
   buildCalOvGrid();
 }
 
 function closeCalendarOverlay() {
-  document.getElementById('cal-overlay').classList.remove('open');
+  document.getElementById('cal-overlay').style.display = 'none';
 }
 
 function buildCalOvGrid() {
