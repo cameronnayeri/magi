@@ -186,6 +186,7 @@ async function enterApp() {
   await runBootSequence();
   document.getElementById('app').style.display = 'flex';
   document.getElementById('user-id').textContent = state.user.email.toUpperCase();
+  renderCalendar();
   await loadData();
 }
 
@@ -725,6 +726,16 @@ function buildTaskRow(task) {
   const meta = document.createElement('div');
   meta.className = 'task-meta';
   meta.textContent = task.completed ? `DONE ${timeAgo(task.completed_at)}` : status.text;
+  if (!task.completed) {
+    meta.style.cursor = 'pointer';
+    meta.title = 'Click to edit deadline';
+    meta.addEventListener('click', e => {
+      e.stopPropagation();
+      const open = deadlineRow.style.display === 'flex';
+      deadlineRow.style.display = open ? 'none' : 'flex';
+      if (!open) deadlineInput.focus();
+    });
+  }
   main.appendChild(meta);
 
   // Notes panel
