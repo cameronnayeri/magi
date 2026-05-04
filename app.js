@@ -507,6 +507,9 @@ function render() {
     renderArchive(document.getElementById('archive-search').value);
   }
   renderCalendar();
+  if (document.getElementById('cal-overlay').classList.contains('open')) {
+    buildCalOvGrid();
+  }
 }
 
 function buildListColumn(list, idx) {
@@ -1154,6 +1157,124 @@ document.getElementById('cal-prev').addEventListener('click', () => {
 document.getElementById('cal-next').addEventListener('click', () => {
   calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1);
   renderCalendar();
+});
+
+// ============ CALENDAR FULLSCREEN OVERLAY ============
+let calOvDate = new Date();
+
+function openCalendarOverlay() {
+  calOvDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1);
+  document.getElementById('cal-overlay').classList.add('open');
+  buildCalOvGrid();
+}
+
+function closeCalendarOverlay() {
+  document.getElementById('cal-overlay').classList.remove('open');
+}
+
+function buildCalOvGrid() {
+  const y = calOvDate.getFullYear();
+  const m = calOvDate.getMonth();
+  document.getElementById('cal-ov-title').textContent = `${CAL_MONTHS[m]} ${y}`;
+
+  const grid = document.getElementById('cal-ov-grid');
+  grid.innerHTML = '';
+
+  // Day-of-week headers
+  ['SUN','MON','TUE','WED','THU','FRI','SAT'].forEach(d => {
+    const h = document.createElement('div');
+    h.className = 'cal-ov-dh';
+    h.textContent = d;
+    grid.appendChild(h);
+  });
+
+  const firstDow  = new Date(y, m, 1).getDay();
+  const daysInMon = new Date(y, m + 1, 0).getDate();
+  const daysInPrev = new Date(y, m, 0).getDate();
+  const totalCells = Math.ceil((firstDow + daysInMon) / 7) * 7;
+  const numRows = totalCells / 7;
+  const today = todayStr();
+
+  // Set rows: auto for header, 1fr each for day rows
+  grid.style.gridTemplateRows = `auto repeat(${numRows}, 1fr)`;
+
+  for (let i = 0; i < totalCells; i++) {
+    let day, y2, m2, other;
+    if (i < firstDow) {
+      day = daysInPrev - firstDow + i + 1;
+      y2 = m === 0 ? y - 1 : y;
+      m2 = m === 0 ? 11 : m - 1;
+      other = true;
+    } else if (i < firstDow + daysInMon) {
+      day = i - firstDow + 1;
+      y2 = y; m2 = m; other = false;
+    } else {
+      day = i - firstDow - daysInMon + 1;
+      y2 = m === 11 ? y + 1 : y;
+      m2 = m === 11 ? 0 : m + 1;
+      other = true;
+    }
+    const ds = `${y2}-${String(m2+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+
+    const cell = document.createElement('div');
+    cell.className = 'cal-ov-day';
+    if (other)    cell.classList.add('other-month');
+    if (ds === today) cell.classList.add('today');
+
+    const num = document.createElement('div');
+    num.className = 'cal-ov-day-num';
+    num.textContent = day;
+    cell.appendChild(num);
+
+    state.tasks
+      .filter(t => !t.archived && t.due_at && t.due_at.substring(0,10) === ds)
+      .forEach(t => {
+        const list = state.lists.find(l => l.id === t.list_id);
+        const item = document.createElement('div');
+        item.className = 'cal-ov-item' + (t.completed ? ' done' : '');
+        item.style.color = evaColorHex(list?.color || 'cyan');
+        const dot = document.createElement('div');
+        dot.className = 'cal-ov-item-dot';
+        dot.style.background = evaColorHex(list?.color || 'cyan');
+        const span = document.createElement('span');
+        span.className = 'cal-ov-item-text';
+        span.textContent = t.text;
+        item.appendChild(dot);
+        item.appendChild(span);
+        cell.appendChild(item);
+      });
+
+    state.events
+      .filter(e => e.event_date === ds)
+      .forEach(ev => {
+        const item = document.createElement('div');
+        item.className = 'cal-ov-item evt';
+        const sq = document.createElement('div');
+        sq.className = 'cal-ov-item-sq';
+        const span = document.createElement('span');
+        span.className = 'cal-ov-item-text';
+        span.textContent = ev.title;
+        item.appendChild(sq);
+        item.appendChild(span);
+        cell.appendChild(item);
+      });
+
+    grid.appendChild(cell);
+  }
+}
+
+document.getElementById('cal-expand').addEventListener('click', openCalendarOverlay);
+document.getElementById('cal-ov-close').addEventListener('click', closeCalendarOverlay);
+document.getElementById('cal-ov-prev').addEventListener('click', () => {
+  calOvDate = new Date(calOvDate.getFullYear(), calOvDate.getMonth() - 1, 1);
+  buildCalOvGrid();
+});
+document.getElementById('cal-ov-next').addEventListener('click', () => {
+  calOvDate = new Date(calOvDate.getFullYear(), calOvDate.getMonth() + 1, 1);
+  buildCalOvGrid();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeCalendarOverlay();
 });
 
 // ============ COMPLETED PANEL TOGGLE ============
