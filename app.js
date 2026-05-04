@@ -28,12 +28,23 @@ let activeColorPicker = null;
 function closeColorPicker() {
   if (activeColorPicker) { activeColorPicker.remove(); activeColorPicker = null; }
 }
-document.addEventListener('click', () => closeColorPicker());
+
+let calContextMenu = null;
+function closeContextMenu() {
+  if (calContextMenu) { calContextMenu.remove(); calContextMenu = null; }
+}
+
+document.addEventListener('click', () => { closeColorPicker(); closeContextMenu(); });
+
+let calendarDate = new Date();
+let selectedCalDay = null;
+let dragTaskId = null;
 
 let state = {
   user: null,
   lists: [],
   tasks: [],
+  events: [],
 };
 
 // ============ SETTINGS ============
@@ -209,6 +220,12 @@ async function loadData() {
 
   state.tasks = tasks || [];
 
+  const { data: events } = await supabase
+    .from('events')
+    .select('*')
+    .order('event_date', { ascending: true });
+  state.events = events || [];
+
   // Auto-archive completed tasks > 3 days old
   await autoArchive();
 
@@ -337,6 +354,52 @@ async function restoreTask(id) {
   render();
 }
 
+async function updateTaskDeadline(id, dateStr) {
+  const task = state.tasks.find(t => t.id === id);
+  if (!task) return;
+  if (!dateStr) {
+    await supabase.from('tasks').update({ due_at: null, deadline_days: 0 }).eq('id', id);
+    task.due_at = null;
+    task.deadline_days = 0;
+  } else {
+    const dueAt = new Date(dateStr + 'T23:59:59').toISOString();
+    await supabase.from('tasks').update({ due_at: dueAt }).eq('id', id);
+    task.due_at = dueAt;
+  }
+  render();
+}
+
+async function createEvent(title, dateStr) {
+  const { data, error } = await supabase
+    .from('events')
+    .insert({ user_id: state.user.id, title, event_date: dateStr })
+    .select()
+    .single();
+  if (error) { alert('Error: ' + error.message); return; }
+  state.events.push(data);
+  selectedCalDay = dateStr;
+  render();
+}
+
+async function deleteEvent(id) {
+  await supabase.from('events').delete().eq('id', id);
+  state.events = state.events.filter(e => e.id !== id);
+  render();
+}
+
+async function createTaskOnDate(listId, text, dateStr) {
+  const dueAt = new Date(dateStr + 'T23:59:59').toISOString();
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert({ user_id: state.user.id, list_id: listId, text, deadline_days: 1, due_at: dueAt, completed: false, archived: false })
+    .select()
+    .single();
+  if (error) { alert('Error: ' + error.message); return; }
+  state.tasks.unshift(data);
+  selectedCalDay = dateStr;
+  render();
+}
+
 async function shareList(listId) {
   const email = prompt('SHARE WITH (EMAIL):', '');
   if (!email || !email.trim()) return;
@@ -442,6 +505,7 @@ function render() {
   if (document.getElementById('archive-panel').classList.contains('open')) {
     renderArchive(document.getElementById('archive-search').value);
   }
+  renderCalendar();
 }
 
 function buildListColumn(list, idx) {
@@ -682,7 +746,50 @@ function buildTaskRow(task) {
 
   if (task.notes) row.classList.add('has-notes');
 
+  // Deadline editor (shown when ✎ is active)
+  const deadlineRow = document.createElement('div');
+  deadlineRow.className = 'task-deadline-edit';
+  const deadlineLabel = document.createElement('span');
+  deadlineLabel.className = 'task-deadline-label';
+  deadlineLabel.textContent = 'DUE:';
+  const deadlineInput = document.createElement('input');
+  deadlineInput.type = 'date';
+  deadlineInput.className = 'task-deadline-input';
+  if (task.due_at) {
+    const d = new Date(task.due_at);
+    deadlineInput.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  deadlineInput.addEventListener('click', e => e.stopPropagation());
+  deadlineInput.addEventListener('change', async () => {
+    await updateTaskDeadline(task.id, deadlineInput.value || null);
+  });
+  const deadlineClr = document.createElement('button');
+  deadlineClr.className = 'task-deadline-clr';
+  deadlineClr.textContent = 'CLR';
+  deadlineClr.addEventListener('click', async e => {
+    e.stopPropagation();
+    deadlineInput.value = '';
+    await updateTaskDeadline(task.id, null);
+  });
+  deadlineRow.appendChild(deadlineLabel);
+  deadlineRow.appendChild(deadlineInput);
+  deadlineRow.appendChild(deadlineClr);
+  main.appendChild(deadlineRow);
+
   row.appendChild(main);
+
+  // Drag to calendar
+  row.draggable = true;
+  row.addEventListener('dragstart', e => {
+    dragTaskId = task.id;
+    e.dataTransfer.setData('text/plain', task.id);
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => row.style.opacity = '0.45', 0);
+  });
+  row.addEventListener('dragend', () => {
+    dragTaskId = null;
+    row.style.opacity = '';
+  });
 
   const edit = document.createElement('button');
   edit.className = 'task-del';
@@ -690,13 +797,20 @@ function buildTaskRow(task) {
   edit.title = 'Edit';
   edit.addEventListener('click', e => {
     e.stopPropagation();
-    text.contentEditable = true;
-    text.focus();
-    const range = document.createRange();
-    range.selectNodeContents(text);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
+    const isOpen = deadlineRow.style.display === 'flex';
+    if (isOpen) {
+      text.contentEditable = false;
+      deadlineRow.style.display = 'none';
+    } else {
+      text.contentEditable = true;
+      text.focus();
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      deadlineRow.style.display = 'flex';
+    }
   });
   row.appendChild(edit);
 
@@ -760,6 +874,276 @@ function promptNewList() {
   if (!name || !name.trim()) return;
   createList(name.trim().toUpperCase());
 }
+
+// ============ CALENDAR ============
+const CAL_MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const CAL_DAYS   = ['S','M','T','W','T','F','S'];
+
+function dateToStr(date) {
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+
+function todayStr() { return dateToStr(new Date()); }
+
+function renderCalendar() {
+  const y = calendarDate.getFullYear();
+  const m = calendarDate.getMonth();
+  document.getElementById('cal-title').textContent = `${CAL_MONTHS[m]} ${y}`;
+  buildCalendarGrid(y, m);
+  if (!selectedCalDay) selectedCalDay = todayStr();
+  renderCalDetail(selectedCalDay);
+}
+
+function buildCalendarGrid(year, month) {
+  const grid = document.getElementById('cal-grid');
+  grid.innerHTML = '';
+
+  CAL_DAYS.forEach(d => {
+    const h = document.createElement('div');
+    h.className = 'cal-day-header';
+    h.textContent = d;
+    grid.appendChild(h);
+  });
+
+  const firstDow   = new Date(year, month, 1).getDay();
+  const daysInMon  = new Date(year, month + 1, 0).getDate();
+  const daysInPrev = new Date(year, month, 0).getDate();
+  const totalCells = Math.ceil((firstDow + daysInMon) / 7) * 7;
+  const today = todayStr();
+
+  for (let i = 0; i < totalCells; i++) {
+    let day, y2, m2, other;
+    if (i < firstDow) {
+      day = daysInPrev - firstDow + i + 1;
+      y2 = month === 0 ? year - 1 : year;
+      m2 = month === 0 ? 11 : month - 1;
+      other = true;
+    } else if (i < firstDow + daysInMon) {
+      day = i - firstDow + 1;
+      y2 = year; m2 = month; other = false;
+    } else {
+      day = i - firstDow - daysInMon + 1;
+      y2 = month === 11 ? year + 1 : year;
+      m2 = month === 11 ? 0 : month + 1;
+      other = true;
+    }
+    const ds = `${y2}-${String(m2+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    grid.appendChild(buildDayCell(ds, day, other, today));
+  }
+}
+
+function buildDayCell(dateStr, day, otherMonth, today) {
+  const cell = document.createElement('div');
+  cell.className = 'cal-day';
+  cell.dataset.date = dateStr;
+  if (otherMonth)             cell.classList.add('other-month');
+  if (dateStr === today)      cell.classList.add('today');
+  if (dateStr === selectedCalDay) cell.classList.add('selected');
+
+  const num = document.createElement('div');
+  num.className = 'cal-day-num';
+  num.textContent = day;
+  cell.appendChild(num);
+
+  const dayTasks  = state.tasks.filter(t => !t.archived && t.due_at && t.due_at.substring(0,10) === dateStr);
+  const dayEvents = state.events.filter(e => e.event_date === dateStr);
+
+  if (dayTasks.length || dayEvents.length) {
+    const dots = document.createElement('div');
+    dots.className = 'cal-dots';
+    let shown = 0;
+    dayTasks.forEach(t => {
+      if (shown >= 5) return;
+      const list = state.lists.find(l => l.id === t.list_id);
+      const dot = document.createElement('div');
+      dot.className = 'cal-dot';
+      dot.style.background = evaColorHex(list?.color || 'cyan');
+      if (t.completed) dot.style.opacity = '0.3';
+      dots.appendChild(dot);
+      shown++;
+    });
+    dayEvents.forEach(ev => {
+      if (shown >= 5) return;
+      const dot = document.createElement('div');
+      dot.className = 'cal-evt-dot';
+      dots.appendChild(dot);
+      shown++;
+    });
+    const total = dayTasks.length + dayEvents.length;
+    if (total > 5) {
+      const more = document.createElement('span');
+      more.style.cssText = 'font-size:7px;color:var(--orange-dim);';
+      more.textContent = `+${total-5}`;
+      dots.appendChild(more);
+    }
+    cell.appendChild(dots);
+  }
+
+  cell.addEventListener('click', e => {
+    e.stopPropagation();
+    document.querySelectorAll('.cal-day.selected').forEach(el => el.classList.remove('selected'));
+    cell.classList.add('selected');
+    selectedCalDay = dateStr;
+    renderCalDetail(dateStr);
+  });
+
+  cell.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    showContextMenu(e.clientX, e.clientY, dateStr);
+  });
+
+  cell.addEventListener('dragover', e => {
+    if (!dragTaskId) return;
+    e.preventDefault();
+    cell.classList.add('drag-over');
+  });
+  cell.addEventListener('dragleave', () => cell.classList.remove('drag-over'));
+  cell.addEventListener('drop', async e => {
+    e.preventDefault();
+    cell.classList.remove('drag-over');
+    const taskId = e.dataTransfer.getData('text/plain');
+    if (taskId) {
+      await updateTaskDeadline(taskId, dateStr);
+      selectedCalDay = dateStr;
+    }
+  });
+
+  return cell;
+}
+
+function renderCalDetail(dateStr) {
+  const detail = document.getElementById('cal-detail');
+  detail.innerHTML = '';
+
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dateLabel = document.createElement('div');
+  dateLabel.className = 'cal-detail-date';
+  dateLabel.textContent = `// ${String(d).padStart(2,'0')} ${CAL_MONTHS[m-1]} ${y}`;
+  detail.appendChild(dateLabel);
+
+  const dayTasks  = state.tasks.filter(t => !t.archived && t.due_at && t.due_at.substring(0,10) === dateStr);
+  const dayEvents = state.events.filter(e => e.event_date === dateStr);
+
+  if (dayTasks.length) {
+    const sec = document.createElement('div');
+    sec.className = 'cal-detail-section';
+    const h = document.createElement('div');
+    h.className = 'cal-detail-heading';
+    h.textContent = 'TASKS';
+    sec.appendChild(h);
+    dayTasks.forEach(t => {
+      const list = state.lists.find(l => l.id === t.list_id);
+      const item = document.createElement('div');
+      item.className = 'cal-task-item' + (t.completed ? ' done' : '');
+      const dot = document.createElement('div');
+      dot.className = 'cal-task-dot';
+      dot.style.background = evaColorHex(list?.color || 'cyan');
+      const name = document.createElement('span');
+      name.className = 'cal-task-name';
+      name.textContent = t.text;
+      const listTag = document.createElement('span');
+      listTag.className = 'cal-task-list';
+      listTag.textContent = list?.name || '';
+      item.appendChild(dot);
+      item.appendChild(name);
+      item.appendChild(listTag);
+      sec.appendChild(item);
+    });
+    detail.appendChild(sec);
+  }
+
+  if (dayEvents.length) {
+    const sec = document.createElement('div');
+    sec.className = 'cal-detail-section';
+    const h = document.createElement('div');
+    h.className = 'cal-detail-heading';
+    h.textContent = 'EVENTS';
+    sec.appendChild(h);
+    dayEvents.forEach(ev => {
+      const item = document.createElement('div');
+      item.className = 'cal-evt-item';
+      const sq = document.createElement('div');
+      sq.className = 'cal-evt-sq';
+      const name = document.createElement('span');
+      name.className = 'cal-evt-name';
+      name.textContent = ev.title;
+      const del = document.createElement('button');
+      del.className = 'cal-evt-del';
+      del.textContent = '×';
+      del.title = 'Delete event';
+      del.addEventListener('click', e => { e.stopPropagation(); deleteEvent(ev.id); });
+      item.appendChild(sq);
+      item.appendChild(name);
+      item.appendChild(del);
+      sec.appendChild(item);
+    });
+    detail.appendChild(sec);
+  }
+
+  if (!dayTasks.length && !dayEvents.length) {
+    const empty = document.createElement('div');
+    empty.className = 'cal-empty';
+    empty.textContent = '> NO ENTRIES';
+    detail.appendChild(empty);
+  }
+}
+
+function showContextMenu(x, y, dateStr) {
+  closeContextMenu();
+  const menu = document.createElement('div');
+  menu.className = 'cal-ctx-menu';
+  menu.style.left = x + 'px';
+  menu.style.top  = y + 'px';
+  menu.addEventListener('click', e => e.stopPropagation());
+
+  const addTask = document.createElement('div');
+  addTask.className = 'cal-ctx-item';
+  addTask.textContent = '+ NEW TASK';
+  addTask.addEventListener('click', () => { closeContextMenu(); promptCalTask(dateStr); });
+
+  const addEvt = document.createElement('div');
+  addEvt.className = 'cal-ctx-item';
+  addEvt.textContent = '+ NEW EVENT';
+  addEvt.addEventListener('click', () => { closeContextMenu(); promptCalEvent(dateStr); });
+
+  menu.appendChild(addTask);
+  menu.appendChild(addEvt);
+  document.body.appendChild(menu);
+  calContextMenu = menu;
+}
+
+function promptCalTask(dateStr) {
+  const text = prompt('TASK NAME:');
+  if (!text?.trim()) return;
+  if (!state.lists.length) { alert('CREATE A LIST FIRST'); return; }
+  let listId;
+  if (state.lists.length === 1) {
+    listId = state.lists[0].id;
+  } else {
+    const names = state.lists.map((l, i) => `${i+1}. ${l.name}`).join('\n');
+    const pick = prompt(`SELECT LIST:\n${names}\n\nEnter number:`);
+    const idx = parseInt(pick) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= state.lists.length) return;
+    listId = state.lists[idx].id;
+  }
+  createTaskOnDate(listId, text.trim(), dateStr);
+}
+
+function promptCalEvent(dateStr) {
+  const title = prompt('EVENT NAME:');
+  if (!title?.trim()) return;
+  createEvent(title.trim(), dateStr);
+}
+
+document.getElementById('cal-prev').addEventListener('click', () => {
+  calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1);
+  renderCalendar();
+});
+document.getElementById('cal-next').addEventListener('click', () => {
+  calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1);
+  renderCalendar();
+});
 
 // ============ COMPLETED PANEL TOGGLE ============
 const completedPanel = document.getElementById('completed-panel');
