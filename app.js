@@ -57,7 +57,7 @@ let state = {
 };
 
 // ============ SETTINGS ============
-const DEFAULT_SETTINGS = { boot: true, scanlines: true, flicker: true, hex: true, chrome: true };
+const DEFAULT_SETTINGS = { boot: true, scanlines: true, flicker: true, hex: true, chrome: true, headerColorOnly: false };
 
 function loadSettings() {
   try {
@@ -536,11 +536,15 @@ function render() {
 function buildListColumn(list, idx) {
   const col = document.createElement('div');
   col.className = 'list-column';
-  col.style.color = evaColorHex(list.color || 'cyan');
   col.dataset.listId = list.id;
 
   const header = document.createElement('div');
   header.className = 'list-header';
+  if (settings.headerColorOnly) {
+    header.style.color = evaColorHex(list.color || 'cyan');
+  } else {
+    col.style.color = evaColorHex(list.color || 'cyan');
+  }
 
   const name = document.createElement('div');
   name.className = 'list-name';
@@ -1458,6 +1462,7 @@ document.querySelectorAll('.toggle').forEach(t => {
     saveSettings(settings);
     applySettings(settings);
     syncSettingsUI();
+    if (key === 'headerColorOnly') render();
   });
 });
 
