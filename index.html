@@ -1219,12 +1219,12 @@
   .task-imp {
     flex: 0 0 16px;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     gap: 2px;
     cursor: pointer;
     padding: 0 1px;
-    align-self: stretch;
+    margin-top: 2px;
     opacity: 0.85;
   }
   .task-imp:hover { opacity: 1; }
@@ -1249,8 +1249,12 @@
   /* ============ APPROACHING URGENCY ============ */
   .task-row.approaching {
     border-left-color: var(--yellow);
-    border-left-style: dashed;
-    background: rgba(255,221,51,0.03);
+    animation: pulse-yellow 2.8s infinite;
+  }
+
+  @keyframes pulse-yellow {
+    0%, 100% { background: rgba(255,221,51,0.02); }
+    50%       { background: rgba(255,221,51,0.09); }
   }
 
   /* ============ TASK DEADLINE EDITOR ============ */
