@@ -40,6 +40,15 @@ let calendarDate = new Date();
 let selectedCalDay = null;
 let dragTaskId = null;
 
+function loadHiddenLists() {
+  try { return new Set(JSON.parse(localStorage.getItem('magi:hidden-lists') || '[]')); }
+  catch { return new Set(); }
+}
+function saveHiddenLists() {
+  localStorage.setItem('magi:hidden-lists', JSON.stringify([...hiddenLists]));
+}
+let hiddenLists = loadHiddenLists();
+
 let state = {
   user: null,
   lists: [],
@@ -346,6 +355,13 @@ async function saveTaskText(id, text) {
   if (task) task.text = text;
 }
 
+async function saveTaskImportance(id, importance) {
+  await supabase.from('tasks').update({ importance }).eq('id', id);
+  const task = state.tasks.find(t => t.id === id);
+  if (task) task.importance = importance;
+  render();
+}
+
 async function restoreTask(id) {
   await supabase.from('tasks')
     .update({ archived: false, completed: false, completed_at: null })
@@ -417,7 +433,7 @@ async function shareList(listId) {
 
 // ============ TIME UTILS ============
 function getTimeStatus(task) {
-  if (!task.due_at) return { text: 'NO DEADLINE', overdue: false, urgent: false };
+  if (!task.due_at) return { text: 'NO DEADLINE', overdue: false, urgent: false, approaching: false };
   const due = new Date(task.due_at).getTime();
   const ms = due - Date.now();
   const overdue = ms < 0;
@@ -426,7 +442,9 @@ function getTimeStatus(task) {
   const hours = Math.floor((abs % 86400000) / 3600000);
   let text = days >= 1 ? `${days}D ${hours}H` : `${hours}H`;
   text = overdue ? `${text} OVERDUE` : `${text} LEFT`;
-  return { text, overdue, urgent: !overdue && ms < 86400000 };
+  const urgent     = !overdue && ms < 86400000;
+  const approaching = !overdue && !urgent && ms < 201600000; // 56h window
+  return { text, overdue, urgent, approaching };
 }
 
 function timeAgo(iso) {
@@ -490,9 +508,12 @@ function render() {
     container.appendChild(noLists);
     document.getElementById('first-list-btn').addEventListener('click', promptNewList);
   } else {
-    state.lists.forEach((list, idx) => {
-      container.appendChild(buildListColumn(list, idx));
-    });
+    state.lists
+      .filter(l => !hiddenLists.has(l.id))
+      .forEach(list => {
+        const idx = state.lists.indexOf(list);
+        container.appendChild(buildListColumn(list, idx));
+      });
 
     const addCol = document.createElement('div');
     addCol.className = 'add-list-column';
@@ -595,6 +616,19 @@ function buildListColumn(list, idx) {
     del.addEventListener('click', () => deleteList(list.id));
     actions.appendChild(del);
   }
+
+  const hideBtn = document.createElement('button');
+  hideBtn.className = 'mini-btn';
+  hideBtn.textContent = 'HIDE';
+  hideBtn.title = 'Hide this list (unhide via Settings)';
+  hideBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    hiddenLists.add(list.id);
+    saveHiddenLists();
+    render();
+  });
+  actions.appendChild(hideBtn);
+
   header.appendChild(actions);
 
   col.appendChild(header);
@@ -695,6 +729,7 @@ function buildTaskRow(task) {
   if (!task.completed) {
     if (status.overdue) row.classList.add('overdue');
     else if (status.urgent) row.classList.add('urgent');
+    else if (status.approaching) row.classList.add('approaching');
   }
 
   const check = document.createElement('div');
@@ -705,6 +740,24 @@ function buildTaskRow(task) {
   }
   check.addEventListener('click', e => { e.stopPropagation(); toggleTask(task.id); });
   row.appendChild(check);
+
+  // Importance badge (0=none, 1=low/green, 2=medium/yellow, 3=heavy/red)
+  const imp = task.importance || 0;
+  const impEl = document.createElement('div');
+  impEl.className = 'task-imp';
+  const impColors = ['', 'low', 'medium', 'heavy'];
+  const impLabels = ['SET IMPORTANCE', 'LOW', 'MEDIUM', 'HEAVY'];
+  impEl.title = impLabels[imp];
+  for (let i = 0; i < imp; i++) {
+    const bar = document.createElement('div');
+    bar.className = `imp-bar ${impColors[imp]}`;
+    impEl.appendChild(bar);
+  }
+  impEl.addEventListener('click', async e => {
+    e.stopPropagation();
+    await saveTaskImportance(task.id, (imp + 1) % 4);
+  });
+  row.appendChild(impEl);
 
   const main = document.createElement('div');
   main.className = 'task-main';
@@ -1366,6 +1419,34 @@ function syncSettingsUI() {
   document.querySelectorAll('.toggle').forEach(t => {
     t.classList.toggle('on', settings[t.dataset.setting]);
   });
+
+  const hiddenEl = document.getElementById('hidden-lists-list');
+  hiddenEl.innerHTML = '';
+  const hidden = state.lists.filter(l => hiddenLists.has(l.id));
+  if (hidden.length === 0) {
+    hiddenEl.innerHTML = '<div style="color:var(--grey);font-size:10px;letter-spacing:1px;">NONE</div>';
+  } else {
+    hidden.forEach(l => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:3px 0;';
+      const name = document.createElement('span');
+      name.style.cssText = `font-size:11px;color:${evaColorHex(l.color || 'cyan')};`;
+      name.textContent = l.name;
+      const showBtn = document.createElement('button');
+      showBtn.className = 'mini-btn';
+      showBtn.textContent = 'SHOW';
+      showBtn.style.color = evaColorHex(l.color || 'cyan');
+      showBtn.addEventListener('click', () => {
+        hiddenLists.delete(l.id);
+        saveHiddenLists();
+        syncSettingsUI();
+        render();
+      });
+      row.appendChild(name);
+      row.appendChild(showBtn);
+      hiddenEl.appendChild(row);
+    });
+  }
 }
 
 document.querySelectorAll('.toggle').forEach(t => {

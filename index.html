@@ -1103,18 +1103,19 @@
   }
   .cal-expand-btn:hover { color: var(--orange); border-color: var(--orange); }
 
-  /* ============ CALENDAR FULLSCREEN OVERLAY ============ */
+  /* ============ CALENDAR EXPANDED OVERLAY (right-side panel) ============ */
   #cal-overlay {
     display: none;
     position: fixed;
-    inset: 0;
+    top: 0; right: 0; bottom: 0;
+    width: min(580px, 72vw);
     background: var(--bg);
-    z-index: 7500;
+    border-left: 1px solid var(--orange);
+    z-index: 7200;
     flex-direction: column;
-    padding: 12px 16px;
+    padding: 12px 14px;
     gap: 10px;
   }
-  #cal-overlay.open { display: flex; }
 
   .cal-ov-bar {
     display: flex;
@@ -1212,6 +1213,44 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* ============ TASK IMPORTANCE ============ */
+  .task-imp {
+    flex: 0 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    cursor: pointer;
+    padding: 0 1px;
+    align-self: stretch;
+    opacity: 0.85;
+  }
+  .task-imp:hover { opacity: 1; }
+  .task-imp:empty::before {
+    content: '';
+    display: block;
+    width: 10px;
+    height: 10px;
+  }
+
+  .imp-bar {
+    width: 3px;
+    border-radius: 1px;
+    transform: skewX(-18deg);
+    flex: 0 0 3px;
+    height: 11px;
+  }
+  .imp-bar.low    { background: var(--green); }
+  .imp-bar.medium { background: var(--yellow); }
+  .imp-bar.heavy  { background: var(--red); }
+
+  /* ============ APPROACHING URGENCY ============ */
+  .task-row.approaching {
+    border-left-color: var(--yellow);
+    border-left-style: dashed;
+    background: rgba(255,221,51,0.03);
   }
 
   /* ============ TASK DEADLINE EDITOR ============ */
@@ -1361,6 +1400,10 @@
     <div class="setting-row"><span>SCREEN FLICKER</span><div class="toggle" data-setting="flicker"></div></div>
     <div class="setting-row"><span>HEX MARGIN CODES</span><div class="toggle" data-setting="hex"></div></div>
     <div class="setting-row"><span>FRAME CHROME</span><div class="toggle" data-setting="chrome"></div></div>
+    <div style="margin-top:14px;border-top:1px solid var(--grey-dim);padding-top:10px;">
+      <div style="font-size:9px;letter-spacing:2px;color:var(--orange-dim);margin-bottom:8px;">HIDDEN LISTS</div>
+      <div id="hidden-lists-list"></div>
+    </div>
     <div class="danger-row">
       <button id="reset-btn">RESET LOCAL CACHE</button>
     </div>
