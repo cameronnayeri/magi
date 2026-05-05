@@ -766,9 +766,10 @@ function buildTaskRow(task) {
 
   const stars = document.createElement('span');
   stars.className = 'task-imp-stars';
-  stars.textContent = ['', '*', '**', '***'][imp];
+  stars.textContent = imp > 0 ? ['*', '**', '***'][imp - 1] : '·';
   stars.title = ['SET IMPORTANCE', 'LOW', 'MEDIUM', 'HEAVY'][imp];
-  stars.style.color = imp > 0 ? impColor : '';
+  stars.style.color = imp > 0 ? impColor : 'var(--dim)';
+  stars.style.opacity = imp > 0 ? '1' : '0.35';
   stars.addEventListener('click', async e => {
     e.stopPropagation();
     await saveTaskImportance(task.id, (imp + 1) % 4);
