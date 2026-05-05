@@ -741,16 +741,19 @@ function buildTaskRow(task) {
   check.addEventListener('click', e => { e.stopPropagation(); toggleTask(task.id); });
   row.appendChild(check);
 
-  // Importance badge (0=none, 1=low/green, 2=medium/yellow, 3=heavy/red)
+  // Importance badge: 0=none, 1=low (1 bar), 2=medium (3 bars), 3=heavy (5 bars)
   const imp = task.importance || 0;
   const impEl = document.createElement('div');
   impEl.className = 'task-imp';
-  const impColors = ['', 'low', 'medium', 'heavy'];
+  const impCounts = [0, 1, 3, 5];
   const impLabels = ['SET IMPORTANCE', 'LOW', 'MEDIUM', 'HEAVY'];
   impEl.title = impLabels[imp];
-  for (let i = 0; i < imp; i++) {
+  const impList = state.lists.find(l => l.id === task.list_id);
+  const impColor = evaColorHex(impList?.color || 'cyan');
+  for (let i = 0; i < impCounts[imp]; i++) {
     const bar = document.createElement('div');
-    bar.className = `imp-bar ${impColors[imp]}`;
+    bar.className = 'imp-bar';
+    bar.style.background = impColor;
     impEl.appendChild(bar);
   }
   impEl.addEventListener('click', async e => {

@@ -1217,34 +1217,25 @@
 
   /* ============ TASK IMPORTANCE ============ */
   .task-imp {
-    flex: 0 0 16px;
+    flex: 0 0 18px;
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    gap: 2px;
+    gap: 1px;
     cursor: pointer;
     padding: 0 1px;
     margin-top: 2px;
     opacity: 0.85;
   }
   .task-imp:hover { opacity: 1; }
-  .task-imp:empty::before {
-    content: '';
-    display: block;
-    width: 10px;
-    height: 10px;
-  }
 
   .imp-bar {
-    width: 3px;
+    width: 2px;
+    flex: 0 0 2px;
+    height: 11px;
     border-radius: 1px;
     transform: skewX(-18deg);
-    flex: 0 0 3px;
-    height: 11px;
   }
-  .imp-bar.low    { background: var(--green); }
-  .imp-bar.medium { background: var(--yellow); }
-  .imp-bar.heavy  { background: var(--red); }
 
   /* ============ APPROACHING URGENCY ============ */
   .task-row.approaching {
