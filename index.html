@@ -1216,26 +1216,20 @@
   }
 
   /* ============ TASK IMPORTANCE ============ */
-  .task-imp {
-    flex: 0 0 18px;
+  .task-text-row {
     display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 1px;
+    align-items: baseline;
+    gap: 5px;
+  }
+  .task-imp-stars {
+    flex: 0 0 auto;
+    font-size: 10px;
+    letter-spacing: 1px;
     cursor: pointer;
-    padding: 0 1px;
-    margin-top: 2px;
     opacity: 0.85;
+    user-select: none;
   }
-  .task-imp:hover { opacity: 1; }
-
-  .imp-bar {
-    width: 2px;
-    flex: 0 0 2px;
-    height: 11px;
-    border-radius: 1px;
-    transform: skewX(-18deg);
-  }
+  .task-imp-stars:hover { opacity: 1; }
 
   /* ============ APPROACHING URGENCY ============ */
   .task-row.approaching {

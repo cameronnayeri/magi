@@ -741,29 +741,13 @@ function buildTaskRow(task) {
   check.addEventListener('click', e => { e.stopPropagation(); toggleTask(task.id); });
   row.appendChild(check);
 
-  // Importance badge: 0=none, 1=low (1 bar), 2=medium (3 bars), 3=heavy (5 bars)
   const imp = task.importance || 0;
-  const impEl = document.createElement('div');
-  impEl.className = 'task-imp';
-  const impCounts = [0, 1, 3, 5];
-  const impLabels = ['SET IMPORTANCE', 'LOW', 'MEDIUM', 'HEAVY'];
-  impEl.title = impLabels[imp];
   const impList = state.lists.find(l => l.id === task.list_id);
   const impColor = evaColorHex(impList?.color || 'cyan');
-  for (let i = 0; i < impCounts[imp]; i++) {
-    const bar = document.createElement('div');
-    bar.className = 'imp-bar';
-    bar.style.background = impColor;
-    impEl.appendChild(bar);
-  }
-  impEl.addEventListener('click', async e => {
-    e.stopPropagation();
-    await saveTaskImportance(task.id, (imp + 1) % 4);
-  });
-  row.appendChild(impEl);
 
   const main = document.createElement('div');
   main.className = 'task-main';
+
   const text = document.createElement('div');
   text.className = 'task-text';
   text.textContent = task.text;
@@ -780,7 +764,21 @@ function buildTaskRow(task) {
   });
   text.addEventListener('click', e => { if (text.contentEditable === 'true') e.stopPropagation(); });
 
-  main.appendChild(text);
+  const stars = document.createElement('span');
+  stars.className = 'task-imp-stars';
+  stars.textContent = ['', '*', '**', '***'][imp];
+  stars.title = ['SET IMPORTANCE', 'LOW', 'MEDIUM', 'HEAVY'][imp];
+  stars.style.color = imp > 0 ? impColor : '';
+  stars.addEventListener('click', async e => {
+    e.stopPropagation();
+    await saveTaskImportance(task.id, (imp + 1) % 4);
+  });
+
+  const textRow = document.createElement('div');
+  textRow.className = 'task-text-row';
+  textRow.appendChild(text);
+  textRow.appendChild(stars);
+  main.appendChild(textRow);
 
   const meta = document.createElement('div');
   meta.className = 'task-meta';
