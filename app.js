@@ -108,6 +108,12 @@ setInterval(updateClock, 1000);
 const authScreen = document.getElementById('auth-screen');
 const authMsg = document.getElementById('auth-msg');
 
+['auth-email', 'auth-password'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('auth-login').click();
+  });
+});
+
 document.getElementById('auth-login').addEventListener('click', async () => {
   const email = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
