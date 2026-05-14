@@ -532,7 +532,7 @@ function buildProjectCard(proj) {
   top.appendChild(delBtn);
   card.appendChild(top);
 
-  // Delivery date row
+  // Delivery: compact click-to-edit
   const delivRow = document.createElement('div');
   delivRow.className = 'proj-delivery';
 
@@ -540,40 +540,59 @@ function buildProjectCard(proj) {
   delivLabel.style.cssText = 'font-size:8px;opacity:0.5;flex:0 0 auto;';
   delivLabel.textContent = 'DELIVERY:';
 
+  // Display text (default view)
+  const delivDisp = document.createElement('span');
+  delivDisp.style.cssText = 'cursor:pointer;flex:1;font-size:9px;';
+  if (proj.delivery_date) {
+    delivDisp.textContent = fmtDeliveryDate(proj.delivery_date);
+    if (urgency === 'urgent' || urgency === 'overdue') delivDisp.style.color = 'var(--red)';
+    else if (urgency === 'approaching') delivDisp.style.color = 'var(--yellow)';
+    else delivDisp.style.opacity = '0.55';
+  } else {
+    delivDisp.textContent = '+ SET DATE';
+    delivDisp.style.opacity = '0.3';
+  }
+  delivDisp.title = 'Click to edit';
+
+  // Edit controls (hidden until clicked)
+  const delivEditWrap = document.createElement('span');
+  delivEditWrap.style.cssText = 'display:none;align-items:center;gap:4px;flex:1;';
+
   const delivInput = document.createElement('input');
   delivInput.type = 'date';
   delivInput.className = 'proj-delivery-input';
   delivInput.value = proj.delivery_date || '';
-  delivInput.title = 'Set delivery date';
   delivInput.addEventListener('click', e => e.stopPropagation());
   delivInput.addEventListener('change', async () => {
     await updateListProjectDelivery(proj.id, delivInput.value || null);
   });
+  delivInput.addEventListener('blur', () => {
+    delivEditWrap.style.display = 'none';
+    delivDisp.style.display = '';
+  });
+
+  const delivClr = document.createElement('button');
+  delivClr.className = 'proj-delivery-clr';
+  delivClr.textContent = 'CLR';
+  delivClr.addEventListener('click', async e => {
+    e.stopPropagation();
+    delivInput.value = '';
+    await updateListProjectDelivery(proj.id, null);
+  });
+
+  delivEditWrap.appendChild(delivInput);
+  if (proj.delivery_date) delivEditWrap.appendChild(delivClr);
+
+  delivDisp.addEventListener('click', e => {
+    e.stopPropagation();
+    delivDisp.style.display = 'none';
+    delivEditWrap.style.display = 'flex';
+    delivInput.focus();
+  });
 
   delivRow.appendChild(delivLabel);
-  delivRow.appendChild(delivInput);
-
-  if (proj.delivery_date) {
-    const delivClr = document.createElement('button');
-    delivClr.className = 'proj-delivery-clr';
-    delivClr.textContent = 'CLR';
-    delivClr.title = 'Clear delivery date';
-    delivClr.addEventListener('click', async e => {
-      e.stopPropagation();
-      delivInput.value = '';
-      await updateListProjectDelivery(proj.id, null);
-    });
-    delivRow.appendChild(delivClr);
-
-    const urgText = document.createElement('span');
-    urgText.style.cssText = 'font-size:8px;flex:0 0 auto;';
-    urgText.textContent = fmtDeliveryDate(proj.delivery_date);
-    if (urgency === 'urgent' || urgency === 'overdue') urgText.style.color = 'var(--red)';
-    else if (urgency === 'approaching') urgText.style.color = 'var(--yellow)';
-    else urgText.style.opacity = '0.5';
-    delivRow.appendChild(urgText);
-  }
-
+  delivRow.appendChild(delivDisp);
+  delivRow.appendChild(delivEditWrap);
   card.appendChild(delivRow);
 
   // Progress bar (delivery-flagged tasks)
@@ -1098,60 +1117,11 @@ function buildListColumn(list, idx) {
 
   col.appendChild(taskList);
 
-  // Add task form
-  const addForm = document.createElement('div');
-  addForm.className = 'add-task';
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.placeholder = '> NEW TASK...';
-  input.maxLength = 200;
-
-  const deadlineRow = document.createElement('div');
-  deadlineRow.style.cssText = 'display:flex;gap:4px;';
-
-  const deadlineNum = document.createElement('input');
-  deadlineNum.type = 'number';
-  deadlineNum.min = '1';
-  deadlineNum.value = '7';
-  deadlineNum.placeholder = 'N';
-  deadlineNum.style.cssText = 'width:55px;flex:0 0 55px;';
-
-  const deadlineUnit = document.createElement('select');
-  deadlineUnit.style.cssText = 'flex:1;width:auto;';
-  [['none', 'NO DEADLINE'], ['hrs', 'HRS'], ['days', 'DAYS'], ['wks', 'WKS'], ['mo', 'MO']].forEach(([v, l]) => {
-    const o = document.createElement('option');
-    o.value = v;
-    o.textContent = l;
-    if (v === 'days') o.selected = true;
-    deadlineUnit.appendChild(o);
-  });
-
-  deadlineUnit.addEventListener('change', () => {
-    deadlineNum.style.display = deadlineUnit.value === 'none' ? 'none' : '';
-  });
-
-  deadlineRow.appendChild(deadlineNum);
-  deadlineRow.appendChild(deadlineUnit);
-
-  const submit = document.createElement('button');
-  submit.textContent = 'ADD [+]';
-  const handleAdd = () => {
-    const text = input.value.trim();
-    if (!text) return;
-    const unit = deadlineUnit.value;
-    const n = parseInt(deadlineNum.value, 10) || 0;
-    const multipliers = { hrs: 3600000, days: 86400000, wks: 604800000, mo: 2592000000 };
-    const deadlineMs = (unit === 'none' || n <= 0) ? 0 : n * (multipliers[unit] || 0);
-    createTask(list.id, text, deadlineMs);
-    input.value = '';
-  };
-  submit.addEventListener('click', handleAdd);
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') handleAdd(); });
-
-  addForm.appendChild(input);
-  addForm.appendChild(deadlineRow);
-  addForm.appendChild(submit);
-  col.appendChild(addForm);
+  const addBtn = document.createElement('button');
+  addBtn.className = 'add-task-btn';
+  addBtn.textContent = '+ ADD TASK';
+  addBtn.addEventListener('click', () => openAddTaskModal(list.id));
+  col.appendChild(addBtn);
 
   col.appendChild(buildProjectPanel(list));
 
@@ -1961,6 +1931,51 @@ document.getElementById('reset-btn').addEventListener('click', () => {
     applySettings(settings);
     syncSettingsUI();
   }
+});
+
+// ============ TASK ADD MODAL ============
+let addTaskListId = null;
+
+function openAddTaskModal(listId) {
+  addTaskListId = listId;
+  const list = state.lists.find(l => l.id === listId);
+  document.getElementById('tam-list-name').textContent = list?.name || '';
+  document.getElementById('tam-text').value = '';
+  document.getElementById('tam-num').value = '7';
+  document.getElementById('tam-unit').value = 'days';
+  document.getElementById('tam-num').style.display = '';
+  document.getElementById('task-add-modal').classList.add('open');
+  document.getElementById('tam-text').focus();
+}
+
+function closeAddTaskModal() {
+  document.getElementById('task-add-modal').classList.remove('open');
+  addTaskListId = null;
+}
+
+function submitAddTask() {
+  const text = document.getElementById('tam-text').value.trim();
+  if (!text) { document.getElementById('tam-text').focus(); return; }
+  const unit = document.getElementById('tam-unit').value;
+  const n = parseInt(document.getElementById('tam-num').value, 10) || 0;
+  const multipliers = { hrs: 3600000, days: 86400000, wks: 604800000, mo: 2592000000 };
+  const deadlineMs = (unit === 'none' || n <= 0) ? 0 : n * (multipliers[unit] || 0);
+  createTask(addTaskListId, text, deadlineMs);
+  closeAddTaskModal();
+}
+
+document.getElementById('tam-cancel').addEventListener('click', closeAddTaskModal);
+document.getElementById('tam-submit').addEventListener('click', submitAddTask);
+document.getElementById('tam-text').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitAddTask();
+  if (e.key === 'Escape') closeAddTaskModal();
+});
+document.getElementById('tam-unit').addEventListener('change', () => {
+  document.getElementById('tam-num').style.display =
+    document.getElementById('tam-unit').value === 'none' ? 'none' : '';
+});
+document.getElementById('task-add-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('task-add-modal')) closeAddTaskModal();
 });
 
 // ============ AUTO REFRESH (deadline colors) ============

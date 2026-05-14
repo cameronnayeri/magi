@@ -1435,8 +1435,7 @@
 
   .proj-bar-wrap {
     height: 3px;
-    background: currentColor;
-    opacity: 0.15;
+    background: rgba(255,255,255,0.1);
     margin: 3px 0 2px;
     position: relative;
   }
@@ -1444,7 +1443,6 @@
     position: absolute;
     left: 0; top: 0; bottom: 0;
     background: currentColor;
-    opacity: 1;
     transition: width 0.3s;
   }
   .proj-bar-label {
@@ -1562,6 +1560,104 @@
     flex: 0 0 4px;
     margin-top: 1px;
   }
+
+  /* ============ ADD TASK BUTTON ============ */
+  .add-task-btn {
+    width: 100%;
+    background: transparent;
+    border: 1px dashed var(--grey-dim);
+    color: var(--grey);
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 2px;
+    padding: 7px 8px;
+    cursor: pointer;
+    margin-top: 6px;
+    text-align: left;
+    transition: border-color 0.12s, color 0.12s;
+  }
+  .add-task-btn:hover { border-color: currentColor; color: inherit; }
+
+  /* ============ TASK ADD MODAL ============ */
+  #task-add-modal {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.78);
+    z-index: 8200;
+    align-items: center;
+    justify-content: center;
+  }
+  #task-add-modal.open { display: flex; }
+
+  .tam-box {
+    border: 2px solid var(--orange);
+    background: var(--bg);
+    padding: 24px 28px;
+    width: 380px;
+    max-width: 90vw;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .tam-box::before {
+    content: 'NEW TASK';
+    position: absolute;
+    top: -10px; left: 12px;
+    background: var(--bg);
+    padding: 0 8px;
+    color: var(--orange);
+    font-size: 10px;
+    letter-spacing: 2px;
+  }
+  .tam-title {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--orange-dim);
+    margin-bottom: 4px;
+  }
+  .tam-label {
+    display: block;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--orange-dim);
+    margin-top: 2px;
+    margin-bottom: 3px;
+  }
+  .tam-box input[type="text"], .tam-box input[type="number"], .tam-box select {
+    background: transparent;
+    border: 1px solid var(--grey-dim);
+    color: var(--orange);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 6px 8px;
+    outline: none;
+    width: 100%;
+  }
+  .tam-box input:focus, .tam-box select:focus { border-color: var(--orange); }
+  .tam-box select option { background: var(--bg); }
+  .tam-deadline-row { display: flex; gap: 4px; }
+  .tam-deadline-row input { width: 58px; flex: 0 0 58px; }
+  .tam-deadline-row select { flex: 1; }
+  .tam-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 6px;
+  }
+  .tam-actions button {
+    background: transparent;
+    border: 1px solid var(--orange-dim);
+    color: var(--orange-dim);
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 2px;
+    padding: 7px 16px;
+    cursor: pointer;
+  }
+  .tam-actions button:last-child { border-color: var(--orange); color: var(--orange); }
+  .tam-actions button:hover { background: rgba(255,136,0,0.1); }
+  .tam-actions button:last-child:hover { background: var(--orange); color: var(--bg); }
 </style>
 </head>
 <body class="scanlines flicker show-hex show-chrome">
@@ -1675,6 +1771,30 @@
       <button id="reset-btn">RESET LOCAL CACHE</button>
     </div>
     <button class="settings-close" id="settings-close">CLOSE</button>
+  </div>
+</div>
+
+<!-- TASK ADD MODAL -->
+<div id="task-add-modal">
+  <div class="tam-box">
+    <div class="tam-title">LIST: <span id="tam-list-name"></span></div>
+    <label class="tam-label" for="tam-text">TASK</label>
+    <input type="text" id="tam-text" placeholder="> TASK TEXT..." maxlength="200"/>
+    <label class="tam-label">DEADLINE</label>
+    <div class="tam-deadline-row">
+      <input type="number" id="tam-num" min="1" value="7"/>
+      <select id="tam-unit">
+        <option value="none">NO DEADLINE</option>
+        <option value="hrs">HRS</option>
+        <option value="days" selected>DAYS</option>
+        <option value="wks">WKS</option>
+        <option value="mo">MO</option>
+      </select>
+    </div>
+    <div class="tam-actions">
+      <button id="tam-cancel">CANCEL</button>
+      <button id="tam-submit">ADD [+]</button>
+    </div>
   </div>
 </div>
 
