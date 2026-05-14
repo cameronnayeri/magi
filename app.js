@@ -54,6 +54,8 @@ let state = {
   lists: [],
   tasks: [],
   events: [],
+  listProjects: [],
+  taskProjects: [],
 };
 
 // ============ SETTINGS ============
@@ -242,6 +244,28 @@ async function loadData() {
     .order('event_date', { ascending: true });
   state.events = events || [];
 
+  const listIds = state.lists.map(l => l.id);
+  if (listIds.length > 0) {
+    const { data: listProjects } = await supabase
+      .from('list_projects')
+      .select('*')
+      .in('list_id', listIds);
+    state.listProjects = listProjects || [];
+  } else {
+    state.listProjects = [];
+  }
+
+  const taskIds = state.tasks.map(t => t.id);
+  if (taskIds.length > 0) {
+    const { data: taskProjects } = await supabase
+      .from('task_projects')
+      .select('*')
+      .in('task_id', taskIds);
+    state.taskProjects = taskProjects || [];
+  } else {
+    state.taskProjects = [];
+  }
+
   // Auto-archive completed tasks > 3 days old
   await autoArchive();
 
@@ -259,6 +283,406 @@ async function autoArchive() {
     await supabase.from('tasks').update({ archived: true }).in('id', ids);
     toArchive.forEach(t => t.archived = true);
   }
+}
+
+// ============ PROJECT STATUS ============
+const PROJECT_STATUSES = ['QUEUED', 'STANDBY', 'ACTIVE', 'ON HOLD', 'COMPLETE', 'BLOCKED'];
+
+function projStatusColor(status) {
+  const map = {
+    'QUEUED':   'var(--grey)',
+    'STANDBY':  'var(--orange-dim)',
+    'ACTIVE':   'var(--green)',
+    'ON HOLD':  'var(--yellow)',
+    'COMPLETE': 'var(--cyan)',
+    'BLOCKED':  'var(--red)',
+  };
+  return map[status] || 'var(--grey)';
+}
+
+function getProjectUrgency(proj) {
+  if (!proj.delivery_date) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const due = new Date(proj.delivery_date + 'T00:00:00');
+  const diffDays = Math.ceil((due - today) / 86400000);
+  if (diffDays < 0) return 'overdue';
+  if (diffDays <= 2) return 'urgent';
+  if (diffDays <= 6) return 'approaching';
+  return null;
+}
+
+function getProjectProgress(projId) {
+  const linked = state.taskProjects.filter(tp => tp.project_id === projId && tp.for_delivery);
+  const total = linked.length;
+  if (total === 0) return { done: 0, total: 0 };
+  const done = linked.filter(tp => {
+    const task = state.tasks.find(t => t.id === tp.task_id);
+    return task && task.completed;
+  }).length;
+  return { done, total };
+}
+
+function fmtDeliveryDate(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const due = new Date(y, m - 1, d);
+  const diffDays = Math.ceil((due - today) / 86400000);
+  const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  const dl = `${String(d).padStart(2,'0')} ${months[m - 1]}`;
+  if (diffDays < 0) return `${dl} — OVERDUE`;
+  if (diffDays === 0) return `${dl} — TODAY`;
+  if (diffDays === 1) return `${dl} — TOMORROW`;
+  return `${dl} — ${diffDays}D`;
+}
+
+// ============ PROJECT CRUD ============
+async function createListProject(listId, name) {
+  const { data, error } = await supabase
+    .from('list_projects')
+    .insert({ list_id: listId, user_id: state.user.id, name, status: 'QUEUED' })
+    .select()
+    .single();
+  if (error) { alert('Error: ' + error.message); return; }
+  state.listProjects.push(data);
+  expandedProjectPanels.add(listId);
+  render();
+}
+
+async function deleteListProject(id) {
+  if (!confirm('DELETE THIS PROJECT?')) return;
+  await supabase.from('task_projects').delete().eq('project_id', id);
+  await supabase.from('list_projects').delete().eq('id', id);
+  state.listProjects = state.listProjects.filter(p => p.id !== id);
+  state.taskProjects = state.taskProjects.filter(tp => tp.project_id !== id);
+  render();
+}
+
+async function updateListProjectStatus(id, status) {
+  await supabase.from('list_projects').update({ status }).eq('id', id);
+  const proj = state.listProjects.find(p => p.id === id);
+  if (proj) proj.status = status;
+  render();
+}
+
+async function updateListProjectDelivery(id, delivery_date) {
+  await supabase.from('list_projects').update({ delivery_date: delivery_date || null }).eq('id', id);
+  const proj = state.listProjects.find(p => p.id === id);
+  if (proj) proj.delivery_date = delivery_date || null;
+  render();
+}
+
+async function renameListProject(id, name) {
+  await supabase.from('list_projects').update({ name }).eq('id', id);
+  const proj = state.listProjects.find(p => p.id === id);
+  if (proj) proj.name = name;
+}
+
+async function linkTaskToProject(taskId, projectId) {
+  if (state.taskProjects.some(tp => tp.task_id === taskId && tp.project_id === projectId)) return;
+  const { data, error } = await supabase
+    .from('task_projects')
+    .insert({ task_id: taskId, project_id: projectId, for_delivery: false })
+    .select()
+    .single();
+  if (error) { alert('Error: ' + error.message); return; }
+  state.taskProjects.push(data);
+  render();
+}
+
+async function unlinkTaskFromProject(taskId, projectId) {
+  await supabase.from('task_projects')
+    .delete()
+    .eq('task_id', taskId)
+    .eq('project_id', projectId);
+  state.taskProjects = state.taskProjects.filter(
+    tp => !(tp.task_id === taskId && tp.project_id === projectId)
+  );
+  render();
+}
+
+async function toggleTaskForDelivery(taskId, projectId, currentVal) {
+  const newVal = !currentVal;
+  await supabase.from('task_projects')
+    .update({ for_delivery: newVal })
+    .eq('task_id', taskId)
+    .eq('project_id', projectId);
+  const tp = state.taskProjects.find(t => t.task_id === taskId && t.project_id === projectId);
+  if (tp) tp.for_delivery = newVal;
+  render();
+}
+
+// ============ PROJECT PANEL ============
+const expandedProjectPanels = new Set();
+
+function buildProjectPanel(list) {
+  const projects = state.listProjects.filter(p => p.list_id === list.id);
+  if (projects.length > 0 && !expandedProjectPanels.has(list.id)) {
+    expandedProjectPanels.add(list.id);
+  }
+  const isOpen = expandedProjectPanels.has(list.id);
+
+  const panel = document.createElement('div');
+  panel.className = 'proj-panel';
+
+  const hdr = document.createElement('div');
+  hdr.className = 'proj-panel-hdr';
+
+  const toggle = document.createElement('span');
+  toggle.textContent = isOpen ? '▾' : '▸';
+
+  const label = document.createElement('span');
+  label.textContent = `PROJECTS [${projects.length}]`;
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'proj-add-btn';
+  addBtn.title = 'New project';
+  addBtn.textContent = '+';
+  addBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const name = prompt('PROJECT NAME:');
+    if (!name?.trim()) return;
+    createListProject(list.id, name.trim().toUpperCase());
+  });
+
+  hdr.appendChild(toggle);
+  hdr.appendChild(label);
+  hdr.appendChild(addBtn);
+
+  const body = document.createElement('div');
+  body.className = 'proj-panel-body' + (isOpen ? ' open' : '');
+
+  hdr.addEventListener('click', e => {
+    if (addBtn.contains(e.target)) return;
+    const open = body.classList.toggle('open');
+    toggle.textContent = open ? '▾' : '▸';
+    if (open) expandedProjectPanels.add(list.id);
+    else expandedProjectPanels.delete(list.id);
+  });
+
+  if (projects.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'proj-empty';
+    empty.textContent = '> NO PROJECTS';
+    body.appendChild(empty);
+  } else {
+    projects.forEach(proj => body.appendChild(buildProjectCard(proj)));
+  }
+
+  panel.appendChild(hdr);
+  panel.appendChild(body);
+  return panel;
+}
+
+function buildProjectCard(proj) {
+  const urgency = getProjectUrgency(proj);
+
+  const card = document.createElement('div');
+  card.className = 'proj-card' + (urgency ? ' proj-' + urgency : '');
+
+  const top = document.createElement('div');
+  top.className = 'proj-card-top';
+
+  const nameEl = document.createElement('div');
+  nameEl.className = 'proj-card-name';
+  nameEl.textContent = proj.name;
+  nameEl.title = 'Click to rename';
+  nameEl.addEventListener('click', e => {
+    if (nameEl.contentEditable === 'true') { e.stopPropagation(); return; }
+    e.stopPropagation();
+    nameEl.contentEditable = true;
+    nameEl.focus();
+    document.execCommand('selectAll', false, null);
+  });
+  nameEl.addEventListener('blur', async () => {
+    nameEl.contentEditable = false;
+    const newName = nameEl.textContent.trim() || proj.name;
+    if (newName !== proj.name) {
+      await renameListProject(proj.id, newName);
+      proj.name = newName;
+    }
+    nameEl.textContent = proj.name;
+  });
+  nameEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); }
+    if (e.key === 'Escape') { nameEl.textContent = proj.name; nameEl.blur(); }
+  });
+
+  const statusEl = document.createElement('span');
+  statusEl.className = 'proj-status';
+  statusEl.textContent = proj.status;
+  statusEl.style.color = projStatusColor(proj.status);
+  statusEl.style.borderColor = projStatusColor(proj.status);
+  statusEl.title = 'Click to cycle status';
+  statusEl.addEventListener('click', e => {
+    e.stopPropagation();
+    const idx = PROJECT_STATUSES.indexOf(proj.status);
+    const next = PROJECT_STATUSES[(idx + 1) % PROJECT_STATUSES.length];
+    updateListProjectStatus(proj.id, next);
+  });
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'proj-card-del';
+  delBtn.textContent = '×';
+  delBtn.title = 'Delete project';
+  delBtn.addEventListener('click', e => { e.stopPropagation(); deleteListProject(proj.id); });
+
+  top.appendChild(nameEl);
+  top.appendChild(statusEl);
+  top.appendChild(delBtn);
+  card.appendChild(top);
+
+  // Delivery date row
+  const delivRow = document.createElement('div');
+  delivRow.className = 'proj-delivery';
+
+  const delivLabel = document.createElement('span');
+  delivLabel.style.cssText = 'font-size:8px;opacity:0.5;flex:0 0 auto;';
+  delivLabel.textContent = 'DELIVERY:';
+
+  const delivInput = document.createElement('input');
+  delivInput.type = 'date';
+  delivInput.className = 'proj-delivery-input';
+  delivInput.value = proj.delivery_date || '';
+  delivInput.title = 'Set delivery date';
+  delivInput.addEventListener('click', e => e.stopPropagation());
+  delivInput.addEventListener('change', async () => {
+    await updateListProjectDelivery(proj.id, delivInput.value || null);
+  });
+
+  delivRow.appendChild(delivLabel);
+  delivRow.appendChild(delivInput);
+
+  if (proj.delivery_date) {
+    const delivClr = document.createElement('button');
+    delivClr.className = 'proj-delivery-clr';
+    delivClr.textContent = 'CLR';
+    delivClr.title = 'Clear delivery date';
+    delivClr.addEventListener('click', async e => {
+      e.stopPropagation();
+      delivInput.value = '';
+      await updateListProjectDelivery(proj.id, null);
+    });
+    delivRow.appendChild(delivClr);
+
+    const urgText = document.createElement('span');
+    urgText.style.cssText = 'font-size:8px;flex:0 0 auto;';
+    urgText.textContent = fmtDeliveryDate(proj.delivery_date);
+    if (urgency === 'urgent' || urgency === 'overdue') urgText.style.color = 'var(--red)';
+    else if (urgency === 'approaching') urgText.style.color = 'var(--yellow)';
+    else urgText.style.opacity = '0.5';
+    delivRow.appendChild(urgText);
+  }
+
+  card.appendChild(delivRow);
+
+  // Progress bar (delivery-flagged tasks)
+  const progress = getProjectProgress(proj.id);
+  const barWrap = document.createElement('div');
+  barWrap.className = 'proj-bar-wrap';
+  const barFill = document.createElement('div');
+  barFill.className = 'proj-bar-fill';
+  barFill.style.width = progress.total > 0 ? `${Math.round((progress.done / progress.total) * 100)}%` : '0%';
+  barWrap.appendChild(barFill);
+  card.appendChild(barWrap);
+
+  const barLabel = document.createElement('div');
+  barLabel.className = 'proj-bar-label';
+  barLabel.textContent = progress.total === 0
+    ? 'NO DELIVERY TASKS'
+    : `${progress.done}/${progress.total} DELIVERY TASKS`;
+  card.appendChild(barLabel);
+
+  return card;
+}
+
+// ============ TASK PROJECT BADGES ============
+function buildTaskProjRow(task) {
+  const row = document.createElement('div');
+  row.className = 'task-proj-row';
+  row.addEventListener('click', e => e.stopPropagation());
+
+  const label = document.createElement('span');
+  label.className = 'task-proj-label';
+  label.textContent = 'PROJ:';
+  row.appendChild(label);
+
+  const links = state.taskProjects.filter(tp => tp.task_id === task.id);
+
+  links.forEach(tp => {
+    const proj = state.listProjects.find(p => p.id === tp.project_id);
+    if (!proj) return;
+
+    const badge = document.createElement('span');
+    badge.className = 'task-proj-badge' + (tp.for_delivery ? ' for-delivery' : '');
+    badge.title = tp.for_delivery ? 'Flagged for delivery — click to unflag' : 'Click to flag for delivery';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'task-proj-badge-name';
+    nameSpan.textContent = proj.name;
+
+    const flagSpan = document.createElement('span');
+    flagSpan.className = 'task-proj-badge-flag';
+    flagSpan.textContent = tp.for_delivery ? '◉' : '○';
+
+    const delSpan = document.createElement('span');
+    delSpan.className = 'task-proj-badge-del';
+    delSpan.textContent = '×';
+    delSpan.title = 'Unlink';
+    delSpan.addEventListener('click', async e => {
+      e.stopPropagation();
+      await unlinkTaskFromProject(task.id, proj.id);
+    });
+
+    badge.addEventListener('click', async e => {
+      e.stopPropagation();
+      if (delSpan.contains(e.target)) return;
+      await toggleTaskForDelivery(task.id, proj.id, tp.for_delivery);
+    });
+
+    badge.appendChild(nameSpan);
+    badge.appendChild(flagSpan);
+    badge.appendChild(delSpan);
+    row.appendChild(badge);
+  });
+
+  const list = state.lists.find(l => l.id === task.list_id);
+  const avail = list
+    ? state.listProjects.filter(p =>
+        p.list_id === list.id &&
+        !state.taskProjects.some(tp => tp.task_id === task.id && tp.project_id === p.id)
+      )
+    : [];
+
+  if (avail.length > 0) {
+    const sel = document.createElement('select');
+    sel.className = 'proj-assign-select';
+    sel.addEventListener('click', e => e.stopPropagation());
+
+    const def = document.createElement('option');
+    def.value = '';
+    def.textContent = '+LINK';
+    sel.appendChild(def);
+
+    avail.forEach(proj => {
+      const o = document.createElement('option');
+      o.value = proj.id;
+      o.textContent = proj.name;
+      sel.appendChild(o);
+    });
+
+    sel.addEventListener('change', async e => {
+      e.stopPropagation();
+      const projId = sel.value;
+      if (!projId) return;
+      sel.value = '';
+      await linkTaskToProject(task.id, projId);
+    });
+
+    row.appendChild(sel);
+  }
+
+  return row;
 }
 
 async function createList(name) {
@@ -729,6 +1153,8 @@ function buildListColumn(list, idx) {
   addForm.appendChild(submit);
   col.appendChild(addForm);
 
+  col.appendChild(buildProjectPanel(list));
+
   return col;
 }
 
@@ -821,6 +1247,7 @@ function buildTaskRow(task) {
     if (val !== (task.notes || '')) saveTaskNotes(task.id, val);
   });
   notesPanel.appendChild(notesTA);
+  notesPanel.appendChild(buildTaskProjRow(task));
   main.appendChild(notesPanel);
 
   if (task.notes) row.classList.add('has-notes');
@@ -1024,13 +1451,23 @@ function buildDayCell(dateStr, day, otherMonth, today) {
   num.textContent = day;
   cell.appendChild(num);
 
-  const dayTasks  = state.tasks.filter(t => !t.archived && t.due_at && t.due_at.substring(0,10) === dateStr);
-  const dayEvents = state.events.filter(e => e.event_date === dateStr);
+  const dayTasks      = state.tasks.filter(t => !t.archived && t.due_at && t.due_at.substring(0,10) === dateStr);
+  const dayEvents     = state.events.filter(e => e.event_date === dateStr);
+  const dayDeliveries = state.listProjects.filter(p => p.delivery_date === dateStr);
 
-  if (dayTasks.length || dayEvents.length) {
+  if (dayTasks.length || dayEvents.length || dayDeliveries.length) {
     const dots = document.createElement('div');
     dots.className = 'cal-dots';
     let shown = 0;
+
+    dayDeliveries.forEach(proj => {
+      if (shown >= 5) return;
+      const urg = getProjectUrgency(proj);
+      const dot = document.createElement('div');
+      dot.className = 'cal-del-dot' + ((urg === 'urgent' || urg === 'overdue') ? ' urgent' : '');
+      dots.appendChild(dot);
+      shown++;
+    });
     dayTasks.forEach(t => {
       if (shown >= 5) return;
       const list = state.lists.find(l => l.id === t.list_id);
@@ -1048,7 +1485,7 @@ function buildDayCell(dateStr, day, otherMonth, today) {
       dots.appendChild(dot);
       shown++;
     });
-    const total = dayTasks.length + dayEvents.length;
+    const total = dayTasks.length + dayEvents.length + dayDeliveries.length;
     if (total > 5) {
       const more = document.createElement('span');
       more.style.cssText = 'font-size:7px;color:var(--orange-dim);';
@@ -1101,8 +1538,37 @@ function renderCalDetail(dateStr) {
   dateLabel.textContent = `// ${String(d).padStart(2,'0')} ${CAL_MONTHS[m-1]} ${y}`;
   detail.appendChild(dateLabel);
 
-  const dayTasks  = state.tasks.filter(t => !t.archived && t.due_at && t.due_at.substring(0,10) === dateStr);
-  const dayEvents = state.events.filter(e => e.event_date === dateStr);
+  const dayTasks      = state.tasks.filter(t => !t.archived && t.due_at && t.due_at.substring(0,10) === dateStr);
+  const dayEvents     = state.events.filter(e => e.event_date === dateStr);
+  const dayDeliveries = state.listProjects.filter(p => p.delivery_date === dateStr);
+
+  if (dayDeliveries.length) {
+    const sec = document.createElement('div');
+    sec.className = 'cal-detail-section';
+    const h = document.createElement('div');
+    h.className = 'cal-detail-heading';
+    h.textContent = 'DELIVERIES';
+    sec.appendChild(h);
+    dayDeliveries.forEach(proj => {
+      const list = state.lists.find(l => l.id === proj.list_id);
+      const urg = getProjectUrgency(proj);
+      const item = document.createElement('div');
+      item.className = 'cal-del-item' + (urg ? ' ' + urg : '');
+      const sq = document.createElement('div');
+      sq.className = 'cal-del-dot' + ((urg === 'urgent' || urg === 'overdue') ? ' urgent' : '');
+      const name = document.createElement('span');
+      name.className = 'cal-del-name';
+      name.textContent = proj.name;
+      const listTag = document.createElement('span');
+      listTag.className = 'cal-del-list';
+      listTag.textContent = list?.name || '';
+      item.appendChild(sq);
+      item.appendChild(name);
+      item.appendChild(listTag);
+      sec.appendChild(item);
+    });
+    detail.appendChild(sec);
+  }
 
   if (dayTasks.length) {
     const sec = document.createElement('div');
@@ -1160,7 +1626,7 @@ function renderCalDetail(dateStr) {
     detail.appendChild(sec);
   }
 
-  if (!dayTasks.length && !dayEvents.length) {
+  if (!dayTasks.length && !dayEvents.length && !dayDeliveries.length) {
     const empty = document.createElement('div');
     empty.className = 'cal-empty';
     empty.textContent = '> NO ENTRIES';
@@ -1320,6 +1786,22 @@ function buildCalOvGrid() {
         span.className = 'cal-ov-item-text';
         span.textContent = ev.title;
         item.appendChild(sq);
+        item.appendChild(span);
+        cell.appendChild(item);
+      });
+
+    state.listProjects
+      .filter(p => p.delivery_date === ds)
+      .forEach(proj => {
+        const urg = getProjectUrgency(proj);
+        const item = document.createElement('div');
+        item.className = 'cal-ov-item delivery' + ((urg === 'urgent' || urg === 'overdue') ? ' urgent' : '');
+        const diamond = document.createElement('div');
+        diamond.className = 'cal-ov-item-diamond';
+        const span = document.createElement('span');
+        span.className = 'cal-ov-item-text';
+        span.textContent = '◆ ' + proj.name;
+        item.appendChild(diamond);
         item.appendChild(span);
         cell.appendChild(item);
       });

@@ -1285,6 +1285,283 @@
     flex: 0 0 auto;
   }
   .task-deadline-clr:hover { color: var(--red); }
+
+  /* ============ PROJECT PANEL ============ */
+  .proj-panel {
+    border-top: 1px solid currentColor;
+    padding: 5px 0 0;
+    margin-top: 4px;
+    flex: 0 0 auto;
+  }
+
+  .proj-panel-hdr {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 9px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    padding: 2px 0 4px;
+    opacity: 0.65;
+    user-select: none;
+  }
+  .proj-panel-hdr:hover { opacity: 1; }
+  .proj-panel-hdr > span:nth-child(2) { flex: 1; }
+
+  .proj-add-btn {
+    background: transparent;
+    border: 1px solid currentColor;
+    color: inherit;
+    font-family: inherit;
+    font-size: 11px;
+    width: 15px;
+    height: 15px;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.6;
+    flex: 0 0 15px;
+  }
+  .proj-add-btn:hover { opacity: 1; background: rgba(255,255,255,0.06); }
+
+  .proj-panel-body { display: none; }
+  .proj-panel-body.open { display: block; }
+
+  .proj-empty {
+    color: currentColor;
+    opacity: 0.3;
+    font-size: 9px;
+    letter-spacing: 1px;
+    padding: 2px 0 5px;
+  }
+
+  .proj-card {
+    border: 1px solid currentColor;
+    padding: 5px 7px;
+    margin-bottom: 5px;
+    opacity: 0.88;
+    transition: opacity 0.1s;
+  }
+  .proj-card:hover { opacity: 1; }
+
+  .proj-card-top {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 4px;
+  }
+
+  .proj-card-name {
+    flex: 1;
+    font-size: 11px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    outline: none;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .proj-card-name[contenteditable="true"] {
+    border-bottom: 1px dashed currentColor;
+    white-space: normal;
+    overflow: visible;
+  }
+
+  .proj-status {
+    font-size: 8px;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    padding: 1px 4px;
+    border: 1px solid;
+    flex: 0 0 auto;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .proj-status:hover { background: rgba(255,255,255,0.06); }
+
+  .proj-card-del {
+    background: transparent;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 13px;
+    padding: 0 2px;
+    opacity: 0.3;
+    line-height: 1;
+    flex: 0 0 auto;
+  }
+  .proj-card-del:hover { opacity: 1; color: var(--red); }
+
+  .proj-delivery {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    font-size: 9px;
+    letter-spacing: 1px;
+    opacity: 0.7;
+    margin-bottom: 4px;
+  }
+
+  .proj-delivery-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px dashed currentColor;
+    color: inherit;
+    font-family: inherit;
+    font-size: 9px;
+    outline: none;
+    color-scheme: dark;
+    padding: 0;
+    width: 90px;
+  }
+
+  .proj-delivery-clr {
+    background: transparent;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 8px;
+    opacity: 0.45;
+    padding: 0;
+    letter-spacing: 1px;
+  }
+  .proj-delivery-clr:hover { opacity: 1; color: var(--red); }
+
+  .proj-bar-wrap {
+    height: 3px;
+    background: currentColor;
+    opacity: 0.15;
+    margin: 3px 0 2px;
+    position: relative;
+  }
+  .proj-bar-fill {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    background: currentColor;
+    opacity: 1;
+    transition: width 0.3s;
+  }
+  .proj-bar-label {
+    font-size: 8px;
+    letter-spacing: 1px;
+    opacity: 0.45;
+  }
+
+  .proj-card.proj-approaching { animation: proj-pulse-y 2.8s infinite; }
+  .proj-card.proj-approaching .proj-delivery { opacity: 1; }
+  @keyframes proj-pulse-y {
+    0%, 100% { background: rgba(255,221,51,0.02); }
+    50%       { background: rgba(255,221,51,0.08); }
+  }
+  .proj-card.proj-urgent { animation: proj-pulse-r 1.4s infinite; }
+  .proj-card.proj-urgent .proj-delivery { opacity: 1; }
+  @keyframes proj-pulse-r {
+    0%, 100% { background: rgba(255,51,68,0.03); }
+    50%       { background: rgba(255,51,68,0.11); }
+  }
+  .proj-card.proj-overdue { border-color: var(--red) !important; animation: proj-pulse-r 0.9s infinite; }
+  .proj-card.proj-overdue .proj-delivery { opacity: 1; }
+
+  /* ============ TASK PROJECT BADGES ============ */
+  .task-proj-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+    padding-top: 5px;
+    border-top: 1px dashed currentColor;
+    align-items: center;
+  }
+
+  .task-proj-label {
+    font-size: 8px;
+    letter-spacing: 2px;
+    opacity: 0.45;
+    flex: 0 0 auto;
+  }
+
+  .task-proj-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    border: 1px solid currentColor;
+    padding: 1px 5px;
+    font-size: 8px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    opacity: 0.55;
+    user-select: none;
+    max-width: 130px;
+  }
+  .task-proj-badge:hover { opacity: 1; background: rgba(255,255,255,0.04); }
+  .task-proj-badge.for-delivery { opacity: 1; background: rgba(255,255,255,0.05); }
+  .task-proj-badge-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .task-proj-badge-flag { font-size: 8px; flex: 0 0 auto; opacity: 0.7; }
+  .task-proj-badge.for-delivery .task-proj-badge-flag { opacity: 1; }
+  .task-proj-badge-del {
+    font-size: 10px;
+    opacity: 0.3;
+    cursor: pointer;
+    flex: 0 0 auto;
+    margin-left: 1px;
+    line-height: 1;
+  }
+  .task-proj-badge-del:hover { opacity: 1; color: var(--red); }
+
+  .proj-assign-select {
+    background: transparent;
+    border: 1px dashed currentColor;
+    color: inherit;
+    font-family: inherit;
+    font-size: 8px;
+    letter-spacing: 1px;
+    padding: 1px 5px;
+    cursor: pointer;
+    opacity: 0.45;
+    outline: none;
+  }
+  .proj-assign-select:hover { opacity: 1; }
+  .proj-assign-select option { background: var(--bg); color: var(--orange); }
+
+  /* ============ CALENDAR DELIVERIES ============ */
+  .cal-del-dot {
+    width: 5px;
+    height: 5px;
+    transform: rotate(45deg);
+    background: var(--yellow);
+    flex: 0 0 5px;
+    margin-top: 1px;
+  }
+  .cal-del-dot.urgent, .cal-del-dot.overdue { background: var(--red); }
+
+  .cal-del-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 0;
+    font-size: 10px;
+    color: var(--yellow);
+  }
+  .cal-del-item.urgent { color: var(--red); }
+  .cal-del-item.overdue { color: var(--red); opacity: 0.5; text-decoration: line-through; }
+  .cal-del-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cal-del-list { flex: 0 0 auto; font-size: 8px; opacity: 0.4; max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .cal-ov-item.delivery { color: var(--yellow); }
+  .cal-ov-item.delivery.urgent { color: var(--red); }
+  .cal-ov-item-diamond {
+    width: 4px; height: 4px;
+    transform: rotate(45deg);
+    background: currentColor;
+    flex: 0 0 4px;
+    margin-top: 1px;
+  }
 </style>
 </head>
 <body class="scanlines flicker show-hex show-chrome">
